@@ -1,0 +1,151 @@
+SELECT*
+FROM[dbo].[Book1]
+
+
+
+
+#remove Duplicate
+WITH CTE AS (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY [LMK_KEY],[UPRN_SOURCE],[UPRN],[LOW_ENERGY_FIXED_LIGHT_COUNT],
+           [FIXED_LIGHTING_OUTLETS_COUNT],[TENURE],[LODGEMENT_DATETIME],[CONSTRUCTION_AGE_BAND],
+           [POSTTOWN],[CONSTITUENCY_LABEL],[LOCAL_AUTHORITY_LABEL],[ADDRESS],[MECHANICAL_VENTILATION]
+           
+           ORDER BY (SELECT NULL)) AS row_num
+    FROM [dbo].[Book1]
+)
+
+DELETE FROM CTE WHERE row_num > 1;
+
+
+
+#Replace Null value
+
+UPDATE EPC_Data
+SET Energy_Consumption_Current = (SELECT AVG[Energy_Consumption_Current] FROM [dbo].[Book1])
+WHERE Energy_Consumption_Current IS NULL;
+
+#Replace blank Column NO DATA
+
+UPDATE [dbo].[Book1]
+SET PROPERTY_TYPE = 'NO DATA'
+WHERE PROPERTY_TYPE IS NULL OR PROPERTY_TYPE = '';
+
+
+#Filter the year
+DELETE FROM [dbo].[Book1]
+WHERE YEAR(INSPECTION_DATE) < 2013 OR YEAR(INSPECTION_DATE) > 2023;
+
+
+SELECT 
+    [CURRENT_ENERGY_EFFICIENCY],
+    [POTENTIAL_ENERGY_EFFICIENCY]
+FROM 
+    [dbo].[Book1]
+WHERE 
+    TRY_CAST([CURRENT_ENERGY_EFFICIENCY] AS FLOAT) IS NULL
+    OR TRY_CAST([POTENTIAL_ENERGY_EFFICIENCY] AS FLOAT) IS NULL;
+
+
+	UPDATE [dbo].[Book1]
+SET 
+    [CURRENT_ENERGY_EFFICIENCY] = CASE 
+        WHEN PATINDEX('%[^0-9.]%', [CURRENT_ENERGY_EFFICIENCY]) > 0
+        THEN 'Replace or transform logic here'
+        ELSE [CURRENT_ENERGY_EFFICIENCY]
+    END,
+    [POTENTIAL_ENERGY_EFFICIENCY] = CASE 
+        WHEN PATINDEX('%[^0-9.]%', [POTENTIAL_ENERGY_EFFICIENCY]) > 0
+        THEN 'Replace or transform logic here'
+        ELSE [POTENTIAL_ENERGY_EFFICIENCY]
+
+
+#Using Common Table Expressions 
+
+WITH EmissionsCTE AS (
+    SELECT
+        [LOCAL_AUTHORITY],
+        AVG(CAST([CURRENT_ENERGY_EFFICIENCY] AS FLOAT)) AS AvgCurrentEfficiency,
+        AVG(CAST([POTENTIAL_ENERGY_EFFICIENCY] AS FLOAT)) AS AvgPotentialEfficiency
+    FROM 
+        [dbo].[Book1]
+    GROUP BY 
+        Local_Authority
+)
+SELECT * FROM EmissionsCTE;
+
+
+#Creating view
+
+
+
+
+ALTER VIEW View_EnergyRatings AS
+SELECT
+    [POSTCODE],
+    [BUILDING_REFERENCE_NUMBER],
+    [CURRENT_ENERGY_RATING],
+    [POTENTIAL_ENERGY_RATING]
+FROM
+    [dbo].[Book1]
+WHERE
+    LODGEMENT_DATE >= '2020-01-01';
+
+
+CREATE VIEW View_NewEnergyRatings AS
+SELECT
+    [POSTCODE],
+    [BUILDING_REFERENCE_NUMBER],
+    [CURRENT_ENERGY_RATING],
+    [POTENTIAL_ENERGY_RATING]
+FROM
+    [dbo].[Book1]
+WHERE
+    LODGEMENT_DATE >= '2020-01-01';
+
+
+	
+# Stored Procedures
+
+
+
+CREATE PROCEDURE GetPropertyByRating
+    @EnergyRating CHAR(1)
+AS
+BEGIN
+    SELECT
+        [POSTCODE],
+        [BUILDING_REFERENCE_NUMBER],
+        [POTENTIAL_ENERGY_RATING],
+        [CURRENT_ENERGY_RATING],
+        [POTENTIAL_ENERGY_EFFICIENCY],
+        [CURRENT_ENERGY_EFFICIENCY]
+    FROM
+        [dbo].[Book1]
+    WHERE
+        [CURRENT_ENERGY_RATING] = @EnergyRating;
+END;
+
+
+EXEC GetPropertyByRating @EnergyRating = 'D';
+
+SELECT
+    [POSTCODE],
+    [CURRENT_ENERGY_EFFICIENCY],
+    [POTENTIAL_ENERGY_EFFICIENCY],
+    RANK() OVER (ORDER BY ([POTENTIAL_ENERGY_EFFICIENCY] - [CURRENT_ENERGY_EFFICIENCY]) DESC) AS ImprovementRank
+FROM
+    [dbo].[Book1];
+
+
+	
+
+
+
+
+
+
+
+
+
+
